@@ -18,9 +18,13 @@ export class OCRProcessor {
     onProgress?: (progress: number) => void
   ): Promise<ExtractedText> {
     try {
-      // Create a canvas to crop the selected area
+      // Create a high-quality canvas to crop the selected area
       const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', {
+        alpha: false,
+        desynchronized: false,
+        willReadFrequently: false
+      });
       
       if (!ctx) {
         throw new Error('Could not get canvas context');
@@ -34,25 +38,30 @@ export class OCRProcessor {
         img.src = image.imageUrl;
       });
 
-      // Set canvas size to selection area
-      canvas.width = selection.width;
-      canvas.height = selection.height;
+      // Use higher resolution for better OCR accuracy
+      const scaleFactor = 2; // 2x upscaling for OCR
+      canvas.width = selection.width * scaleFactor;
+      canvas.height = selection.height * scaleFactor;
 
-      // Draw the cropped area
+      // Enable high-quality image smoothing
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // Draw the cropped area with upscaling
       ctx.drawImage(
         img,
         selection.x, selection.y, selection.width, selection.height,
-        0, 0, selection.width, selection.height
+        0, 0, canvas.width, canvas.height
       );
 
-      // Convert canvas to blob for Tesseract
+      // Convert canvas to high-quality blob for Tesseract
       const blob = await new Promise<Blob>((resolve) => {
         canvas.toBlob((blob) => {
           resolve(blob!);
-        }, 'image/png');
+        }, 'image/png', 1.0); // Maximum quality PNG
       });
 
-      // Perform OCR
+      // Perform OCR with enhanced settings
       const result = await Tesseract.recognize(blob, 'eng', {
         logger: (m) => {
           if (onProgress && m.status === 'recognizing text') {

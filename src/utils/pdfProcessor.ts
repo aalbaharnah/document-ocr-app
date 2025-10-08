@@ -10,8 +10,25 @@ export interface PDFPageImage {
   height: number;
 }
 
+export interface PDFRenderOptions {
+  scale?: number;
+  quality?: number;
+  imageFormat?: 'png' | 'jpeg';
+  enableAntialiasing?: boolean;
+}
+
 export class PDFProcessor {
-  static async convertPDFToImages(file: File, scale: number = 2): Promise<PDFPageImage[]> {
+  static async convertPDFToImages(
+    file: File, 
+    options: PDFRenderOptions = {}
+  ): Promise<PDFPageImage[]> {
+    const {
+      scale = 3, // Increased from 2 to 3 for better quality
+      quality = 1.0,
+      imageFormat = 'png',
+      enableAntialiasing = true
+    } = options;
+
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -21,9 +38,13 @@ export class PDFProcessor {
         const page = await pdf.getPage(pageNum);
         const viewport = page.getViewport({ scale });
 
-        // Create canvas
+        // Create canvas with high quality settings
         const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', {
+          alpha: false,
+          desynchronized: false,
+          willReadFrequently: false
+        });
         
         if (!context) {
           throw new Error('Could not get canvas context');
@@ -31,6 +52,20 @@ export class PDFProcessor {
 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+
+        // Set high-quality rendering settings
+        if (enableAntialiasing) {
+          context.imageSmoothingEnabled = true;
+          context.imageSmoothingQuality = 'high';
+        }
+        
+        // Set pixel density for high DPI displays
+        const pixelRatio = window.devicePixelRatio || 1;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        canvas.width = viewport.width * pixelRatio;
+        canvas.height = viewport.height * pixelRatio;
+        context.scale(pixelRatio, pixelRatio);
 
         // Render PDF page to canvas
         const renderContext = {
@@ -41,8 +76,9 @@ export class PDFProcessor {
 
         await page.render(renderContext).promise;
 
-        // Convert canvas to image URL
-        const imageUrl = canvas.toDataURL('image/png');
+        // Convert canvas to high-quality image URL
+        const mimeType = imageFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+        const imageUrl = canvas.toDataURL(mimeType, quality);
 
         images.push({
           pageNumber: pageNum,

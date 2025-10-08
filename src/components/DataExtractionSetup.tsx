@@ -20,9 +20,9 @@ export const DataExtractionSetup: React.FC<DataExtractionSetupProps> = ({
   onNext,
 }) => {
   const [fields, setFields] = useState<DataField[]>([
-    { id: '1', name: 'Equipment Tag', description: 'Equipment identification number' },
-    { id: '2', name: 'Temperature', description: 'Operating temperature' },
-    { id: '3', name: 'Pressure', description: 'Operating pressure' },
+    { id: '1', name: 'Project Name', description: 'Project identification name' },
+    { id: '2', name: 'P&ID No', description: 'P&ID number' },
+    { id: '3', name: 'Rev', description: 'Revision number' },
   ]);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldDescription, setNewFieldDescription] = useState('');

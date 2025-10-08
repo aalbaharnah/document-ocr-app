@@ -3,7 +3,8 @@ import { DataExtractionSetup } from './components/DataExtractionSetup';
 import { PDFUpload } from './components/PDFUpload';
 import { ImageDisplay, SelectionArea } from './components/ImageDisplay';
 import { ExtractedTextDisplay } from './components/ExtractedTextDisplay';
-import { PDFProcessor, PDFPageImage } from './utils/pdfProcessor';
+import { QualitySettingsPanel, QualitySettings } from './components/QualitySettings';
+import { PDFProcessor, PDFPageImage, PDFRenderOptions } from './utils/pdfProcessor';
 import { OCRProcessor, ExtractedText } from './utils/ocrProcessor';
 import { CSVExporter } from './utils/csvExporter';
 import { Button } from './components/ui/button';
@@ -31,6 +32,15 @@ function App() {
     total: number;
     currentField: string;
   } | undefined>();
+  
+  // Quality settings state
+  const [qualitySettings, setQualitySettings] = useState<QualitySettings>({
+    scale: 3,
+    quality: 1.0,
+    imageFormat: 'png',
+    enableAntialiasing: true
+  });
+  const [showQualitySettings, setShowQualitySettings] = useState(false);
 
   const handleFieldsChange = (fields: DataField[]) => {
     setDataFields(fields);
@@ -45,7 +55,14 @@ function App() {
     
     setIsProcessing(true);
     try {
-      const images = await PDFProcessor.convertPDFToImages(uploadedFile);
+      const renderOptions: PDFRenderOptions = {
+        scale: qualitySettings.scale,
+        quality: qualitySettings.quality,
+        imageFormat: qualitySettings.imageFormat,
+        enableAntialiasing: qualitySettings.enableAntialiasing
+      };
+      
+      const images = await PDFProcessor.convertPDFToImages(uploadedFile, renderOptions);
       setPdfImages(images);
       setCurrentStep('select');
     } catch (error) {
@@ -230,37 +247,51 @@ function App() {
         )}
 
         {currentStep === 'convert' && (
-          <Card className="w-full max-w-2xl mx-auto">
-            <CardHeader>
-              <CardTitle>Convert PDF to Images</CardTitle>
-              <CardDescription>
-                Converting your PDF file to images for processing...
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-center py-8">
-                {isProcessing ? (
-                  <div className="space-y-4">
-                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
-                    <p>Converting PDF pages to images...</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <Image className="h-16 w-16 text-muted-foreground mx-auto" />
-                    <div>
-                      <h3 className="text-lg font-medium">Ready to Convert</h3>
-                      <p className="text-muted-foreground">
-                        Click the button below to convert your PDF to images
+          <div className="w-full max-w-4xl mx-auto space-y-6">
+            {/* Quality Settings Panel */}
+            <QualitySettingsPanel
+              settings={qualitySettings}
+              onSettingsChange={setQualitySettings}
+              onApply={handlePDFConversion}
+              isProcessing={isProcessing}
+            />
+            
+            {/* Conversion Status Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Convert PDF to Images</CardTitle>
+                <CardDescription>
+                  Converting your PDF file to images for processing...
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-center py-8">
+                  {isProcessing ? (
+                    <div className="space-y-4">
+                      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
+                      <p>Converting PDF pages to images at {qualitySettings.scale}x scale...</p>
+                      <p className="text-sm text-gray-500">
+                        Using {qualitySettings.imageFormat.toUpperCase()} format with {Math.round(qualitySettings.quality * 100)}% quality
                       </p>
                     </div>
-                    <Button onClick={handlePDFConversion} size="lg">
-                      Convert PDF to Images
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  ) : (
+                    <div className="space-y-4">
+                      <Image className="h-16 w-16 text-muted-foreground mx-auto" />
+                      <div>
+                        <h3 className="text-lg font-medium">Ready to Convert</h3>
+                        <p className="text-muted-foreground">
+                          Adjust quality settings above, then click to convert your PDF to images
+                        </p>
+                      </div>
+                      <Button onClick={handlePDFConversion} size="lg">
+                        Convert PDF to Images
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {currentStep === 'select' && pdfImages.length > 0 && (
