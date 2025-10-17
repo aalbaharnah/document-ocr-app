@@ -34,7 +34,7 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
 
   const saveEdit = () => {
     if (!editingId) return;
-    
+
     const updatedData = extractedData.map(item =>
       item.id === editingId ? { ...item, text: editValue } : item
     );
@@ -50,13 +50,13 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 80) return 'text-green-600';
-    if (confidence >= 60) return 'text-yellow-600';
+    if (confidence >= 30) return 'text-yellow-600';
     return 'text-red-600';
   };
 
   const getConfidenceIcon = (confidence: number) => {
     if (confidence >= 80) return '✓';
-    if (confidence >= 60) return '⚠';
+    if (confidence >= 30) return '⚠';
     return '⚠';
   };
 
@@ -73,25 +73,25 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>
-                {processingProgress ? 
-                  `Processing: ${processingProgress.currentField}` : 
+                {processingProgress ?
+                  `Processing: ${processingProgress.currentField}` :
                   'Starting OCR processing...'
                 }
               </span>
               <span>
-                {processingProgress ? 
-                  `${processingProgress.current} / ${processingProgress.total}` : 
+                {processingProgress ?
+                  `${processingProgress.current} / ${processingProgress.total}` :
                   '0 / 0'
                 }
               </span>
             </div>
             <div className="w-full bg-muted rounded-full h-2">
-              <div 
+              <div
                 className="bg-primary h-2 rounded-full transition-all duration-300"
-                style={{ 
-                  width: processingProgress ? 
-                    `${(processingProgress.current / processingProgress.total) * 100}%` : 
-                    '0%' 
+                style={{
+                  width: processingProgress ?
+                    `${(processingProgress.current / processingProgress.total) * 100}%` :
+                    '0%'
                 }}
               />
             </div>
@@ -125,7 +125,7 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-yellow-600">
-              {extractedData.filter(item => item.confidence < 80 && item.confidence >= 60).length}
+              {extractedData.filter(item => item.confidence < 80 && item.confidence >= 30).length}
             </div>
             <div className="text-sm text-muted-foreground">Needs Review</div>
           </div>
@@ -140,13 +140,13 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
             <div className="col-span-1 text-center">Confidence</div>
             <div className="col-span-1 text-center">Actions</div>
           </div>
-          
+
           {extractedData.map((item, index) => (
             <div key={item.id} className="grid grid-cols-12 gap-4 p-3 border-t hover:bg-muted/20">
               <div className="col-span-3 font-medium">
                 {item.fieldName}
               </div>
-              
+
               <div className="col-span-6">
                 {editingId === item.id ? (
                   <div className="flex gap-2">
@@ -171,18 +171,18 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
                   </div>
                 )}
               </div>
-              
+
               <div className="col-span-1 text-center text-sm">
                 {item.pageNumber}
               </div>
-              
+
               <div className={`col-span-1 text-center text-sm font-medium ${getConfidenceColor(item.confidence)}`}>
                 <div className="flex items-center justify-center gap-1">
                   {item.confidence < 80 && <AlertTriangle className="h-3 w-3" />}
                   {Math.round(item.confidence)}%
                 </div>
               </div>
-              
+
               <div className="col-span-1 text-center">
                 {editingId === item.id ? null : (
                   <Button
@@ -205,7 +205,7 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
         )}
 
         {/* Low Confidence Warning */}
-        {extractedData.some(item => item.confidence < 60) && (
+        {extractedData.some(item => item.confidence < 30) && (
           <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
             <div className="flex items-center gap-2 text-yellow-800">
               <AlertTriangle className="h-5 w-5" />
@@ -223,7 +223,7 @@ export const ExtractedTextDisplay: React.FC<ExtractedTextDisplayProps> = ({
           <div className="text-sm text-muted-foreground">
             {extractedData.filter(item => item.text.trim()).length} of {extractedData.length} fields contain text
           </div>
-          <Button 
+          <Button
             onClick={onExportCSV}
             disabled={extractedData.length === 0}
             className="min-w-32"

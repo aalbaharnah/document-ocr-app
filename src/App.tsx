@@ -69,11 +69,15 @@ function App() {
 
       // Process all PDF files
       const allImages: PDFPageImage[] = [];
-      for (let i = 0; i < uploadedFiles.length; i++) {
-        const file = uploadedFiles[i];
-        const images = await PDFProcessor.convertPDFToImages(file, renderOptions, i);
-        allImages.push(...images);
-      }
+      const promises: any[] = []
+      uploadedFiles.forEach((file, i) => {
+        promises.push(PDFProcessor.convertPDFToImages(file, renderOptions, i))
+      })
+
+      const results = await Promise.all(promises)
+      results.forEach((images) => {
+        allImages.push(...images)
+      })
 
       setAllPdfImages(allImages);
       // Use first image as template image
