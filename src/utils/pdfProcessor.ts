@@ -8,6 +8,8 @@ export interface PDFPageImage {
   imageUrl: string;
   width: number;
   height: number;
+  fileName?: string;
+  fileIndex?: number;
 }
 
 export interface PDFRenderOptions {
@@ -19,8 +21,9 @@ export interface PDFRenderOptions {
 
 export class PDFProcessor {
   static async convertPDFToImages(
-    file: File, 
-    options: PDFRenderOptions = {}
+    file: File,
+    options: PDFRenderOptions = {},
+    fileIndex?: number
   ): Promise<PDFPageImage[]> {
     const {
       scale = 3, // Increased from 2 to 3 for better quality
@@ -45,7 +48,7 @@ export class PDFProcessor {
           desynchronized: false,
           willReadFrequently: false
         });
-        
+
         if (!context) {
           throw new Error('Could not get canvas context');
         }
@@ -58,7 +61,7 @@ export class PDFProcessor {
           context.imageSmoothingEnabled = true;
           context.imageSmoothingQuality = 'high';
         }
-        
+
         // Set pixel density for high DPI displays
         const pixelRatio = window.devicePixelRatio || 1;
         canvas.style.width = `${viewport.width}px`;
@@ -85,6 +88,8 @@ export class PDFProcessor {
           imageUrl,
           width: viewport.width,
           height: viewport.height,
+          fileName: file.name,
+          fileIndex: fileIndex,
         });
       }
 

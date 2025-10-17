@@ -2,6 +2,10 @@ import Tesseract from 'tesseract.js';
 import { SelectionArea } from '@/components/ImageDisplay';
 import { PDFPageImage } from './pdfProcessor';
 
+export interface BatchExtractionTemplate {
+  selections: Omit<SelectionArea, 'pageNumber'>[];
+}
+
 export interface ExtractedText {
   id: string;
   fieldName: string;
@@ -25,7 +29,7 @@ export class OCRProcessor {
         desynchronized: false,
         willReadFrequently: false
       });
-      
+
       if (!ctx) {
         throw new Error('Could not get canvas context');
       }
@@ -90,11 +94,11 @@ export class OCRProcessor {
     onProgress?: (current: number, total: number, currentField: string) => void
   ): Promise<ExtractedText[]> {
     const results: ExtractedText[] = [];
-    
+
     for (let i = 0; i < selections.length; i++) {
       const selection = selections[i];
       const image = images.find(img => img.pageNumber === selection.pageNumber);
-      
+
       if (!image) {
         console.warn(`Image not found for page ${selection.pageNumber}`);
         continue;
@@ -124,6 +128,122 @@ export class OCRProcessor {
     return results;
   }
 
+  static async extractTextFromTemplate(
+    images: PDFPageImage[],
+    template: { selections: Omit<SelectionArea, 'pageNumber'>[] },
+    onProgress?: (current: number, total: number, currentPage: number, currentField: string) => void
+  ): Promise<ExtractedText[]> {
+    const results: ExtractedText[] = [];
+    const totalOperations = images.length * template.selections.length;
+    let currentOperation = 0;
+
+    for (const image of images) {
+      for (const templateSelection of template.selections) {
+        currentOperation++;
+
+        // Convert template selection to full selection for this page
+        const selection: SelectionArea = {
+          ...templateSelection,
+          pageNumber: image.pageNumber,
+        };
+
+        try {
+          if (onProgress) {
+            onProgress(
+              currentOperation,
+              totalOperations,
+              image.pageNumber,
+              templateSelection.fieldName || 'Unknown Field'
+            );
+          }
+
+          const result = await this.extractTextFromSelection(image, selection);
+          results.push({
+            ...result,
+            // Add page context to the result
+            id: `${image.pageNumber}-${templateSelection.id}`,
+          });
+        } catch (error) {
+          console.error(`Failed to extract text for page ${image.pageNumber}, field ${templateSelection.fieldName}:`, error);
+          // Continue with other extractions even if one fails
+          results.push({
+            id: `${image.pageNumber}-${templateSelection.id}`,
+            fieldName: templateSelection.fieldName || 'Unknown Field',
+            text: '',
+            confidence: 0,
+            selectionArea: selection,
+            pageNumber: image.pageNumber,
+          });
+        }
+
+        // Small delay to prevent overwhelming the browser
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+
+    return results;
+  }
+
+  static async extractTextFromMultipleFiles(
+    fileImages: { fileName: string; images: PDFPageImage[] }[],
+    template: { selections: Omit<SelectionArea, 'pageNumber'>[] },
+    onProgress?: (currentFile: number, totalFiles: number, currentPage: number, totalPages: number, currentField: string) => void
+  ): Promise<{ fileName: string; results: ExtractedText[] }[]> {
+    const allResults: { fileName: string; results: ExtractedText[] }[] = [];
+
+    for (let fileIndex = 0; fileIndex < fileImages.length; fileIndex++) {
+      const { fileName, images } = fileImages[fileIndex];
+      const fileResults: ExtractedText[] = [];
+
+      for (const image of images) {
+        for (const templateSelection of template.selections) {
+          // Convert template selection to full selection for this page
+          const selection: SelectionArea = {
+            ...templateSelection,
+            pageNumber: image.pageNumber,
+          };
+
+          try {
+            if (onProgress) {
+              onProgress(
+                fileIndex + 1,
+                fileImages.length,
+                image.pageNumber,
+                images.reduce((total, file) => total + file.pageNumber, 0),
+                templateSelection.fieldName || 'Unknown Field'
+              );
+            }
+
+            const result = await this.extractTextFromSelection(image, selection);
+            fileResults.push({
+              ...result,
+              // Add file and page context to the result
+              id: `${fileName}-${image.pageNumber}-${templateSelection.id}`,
+            });
+          } catch (error) {
+            console.error(`Failed to extract text from ${fileName}, page ${image.pageNumber}, field ${templateSelection.fieldName}:`, error);
+            // Continue with other extractions even if one fails
+            fileResults.push({
+              id: `${fileName}-${image.pageNumber}-${templateSelection.id}`,
+              fieldName: templateSelection.fieldName || 'Unknown Field',
+              text: '',
+              confidence: 0,
+              selectionArea: selection,
+              pageNumber: image.pageNumber,
+            });
+          }
+
+          // Small delay to prevent overwhelming the browser
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+
+      allResults.push({ fileName, results: fileResults });
+    }
+
+    return allResults;
+  }
+
   static preprocessImageForOCR(canvas: HTMLCanvasElement): HTMLCanvasElement {
     const ctx = canvas.getContext('2d');
     if (!ctx) return canvas;
@@ -136,11 +256,11 @@ export class OCRProcessor {
     for (let i = 0; i < data.length; i += 4) {
       // Convert to grayscale
       const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      
+
       // Apply threshold (make it black and white)
       const threshold = 128;
       const value = gray > threshold ? 255 : 0;
-      
+
       data[i] = value;     // Red
       data[i + 1] = value; // Green
       data[i + 2] = value; // Blue
@@ -149,7 +269,7 @@ export class OCRProcessor {
 
     // Put the processed image data back
     ctx.putImageData(imageData, 0, 0);
-    
+
     return canvas;
   }
 }

@@ -1,21 +1,21 @@
 import React, { useCallback, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, X } from 'lucide-react';
+import { Upload, FileText, X, Plus, Files } from 'lucide-react';
 
 interface PDFUploadProps {
-  onFileUpload: (file: File) => void;
+  onFileUpload: (files: File[]) => void;
   onNext: () => void;
-  uploadedFile?: File | null;
+  uploadedFiles?: File[];
 }
 
 export const PDFUpload: React.FC<PDFUploadProps> = ({
   onFileUpload,
   onNext,
-  uploadedFile,
+  uploadedFiles = [],
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [currentFile, setCurrentFile] = useState<File | null>(uploadedFile || null);
+  const [currentFiles, setCurrentFiles] = useState<File[]>(uploadedFiles);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -30,26 +30,38 @@ export const PDFUpload: React.FC<PDFUploadProps> = ({
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
-    const pdfFile = files.find(file => file.type === 'application/pdf');
-    
-    if (pdfFile) {
-      setCurrentFile(pdfFile);
-      onFileUpload(pdfFile);
+    const pdfFiles = files.filter(file => file.type === 'application/pdf');
+
+    if (pdfFiles.length > 0) {
+      const updatedFiles = [...currentFiles, ...pdfFiles];
+      setCurrentFiles(updatedFiles);
+      onFileUpload(updatedFiles);
     }
-  }, [onFileUpload]);
+  }, [onFileUpload, currentFiles]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      setCurrentFile(file);
-      onFileUpload(file);
+    const files = e.target.files;
+    if (files) {
+      const pdfFiles = Array.from(files).filter(file => file.type === 'application/pdf');
+      if (pdfFiles.length > 0) {
+        const updatedFiles = [...currentFiles, ...pdfFiles];
+        setCurrentFiles(updatedFiles);
+        onFileUpload(updatedFiles);
+      }
     }
-  }, [onFileUpload]);
+  }, [onFileUpload, currentFiles]);
 
-  const removeFile = () => {
-    setCurrentFile(null);
+  const removeFile = (index: number) => {
+    const updatedFiles = currentFiles.filter((_, i) => i !== index);
+    setCurrentFiles(updatedFiles);
+    onFileUpload(updatedFiles);
+  };
+
+  const clearAllFiles = () => {
+    setCurrentFiles([]);
+    onFileUpload([]);
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -69,54 +81,79 @@ export const PDFUpload: React.FC<PDFUploadProps> = ({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {!currentFile ? (
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              isDragOver 
-                ? 'border-primary bg-primary/5' 
-                : 'border-muted-foreground/25 hover:border-primary/50'
+        {/* Drop Zone */}
+        <div
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isDragOver
+              ? 'border-primary bg-primary/5'
+              : 'border-muted-foreground/25 hover:border-primary/50'
             }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <div className="flex flex-col items-center space-y-4">
-              <Upload className="h-12 w-12 text-muted-foreground" />
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium">Drop your PDF here</h3>
-                <p className="text-sm text-muted-foreground">
-                  or click to browse files
-                </p>
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div className="flex flex-col items-center space-y-4">
+            <Upload className="h-12 w-12 text-muted-foreground" />
+            <div className="space-y-2">
+              <h3 className="text-lg font-medium">Drop your PDF files here</h3>
+              <p className="text-sm text-muted-foreground">
+                or click to browse files (multiple files supported)
+              </p>
+            </div>
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={handleFileInput}
+              className="hidden"
+              id="pdf-upload"
+              multiple
+            />
+            <Button variant="outline" asChild>
+              <label htmlFor="pdf-upload" className="cursor-pointer">
+                <Plus className="h-4 w-4 mr-2" />
+                Add PDF Files
+              </label>
+            </Button>
+          </div>
+        </div>
+
+        {/* Files List */}
+        {currentFiles.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Files className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-medium">
+                  {currentFiles.length} PDF file{currentFiles.length !== 1 ? 's' : ''} selected
+                </h3>
               </div>
-              <input
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={handleFileInput}
-                className="hidden"
-                id="pdf-upload"
-              />
-              <Button variant="outline" asChild>
-                <label htmlFor="pdf-upload" className="cursor-pointer">
-                  Choose File
-                </label>
+              <Button variant="outline" size="sm" onClick={clearAllFiles}>
+                Clear All
               </Button>
             </div>
-          </div>
-        ) : (
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <FileText className="h-8 w-8 text-primary" />
-                <div>
-                  <h3 className="font-medium">{currentFile.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {formatFileSize(currentFile.size)} • PDF Document
-                  </p>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {currentFiles.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <FileText className="h-6 w-6 text-primary" />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-medium truncate">{file.name}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {formatFileSize(file.size)} • PDF Document
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeFile(index)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <Button variant="outline" size="icon" onClick={removeFile}>
-                <X className="h-4 w-4" />
-              </Button>
+              ))}
             </div>
           </div>
         )}
@@ -126,23 +163,27 @@ export const PDFUpload: React.FC<PDFUploadProps> = ({
           <h4 className="font-medium mb-2">File Requirements:</h4>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• PDF format only</li>
-            <li>• Maximum file size: 50MB</li>
+            <li>• Maximum file size: 50MB per file</li>
+            <li>• Multiple PDF files supported</li>
+            <li>• Multiple pages per PDF supported</li>
             <li>• Clear, high-resolution diagrams work best</li>
-            <li>• Multiple pages are supported</li>
           </ul>
         </div>
 
         {/* Action Buttons */}
         <div className="flex justify-between pt-4 border-t">
           <div className="text-sm text-muted-foreground">
-            {currentFile ? 'File ready for processing' : 'No file selected'}
+            {currentFiles.length > 0
+              ? `${currentFiles.length} file${currentFiles.length !== 1 ? 's' : ''} ready for processing`
+              : 'No files selected'
+            }
           </div>
-          <Button 
+          <Button
             onClick={onNext}
-            disabled={!currentFile}
+            disabled={currentFiles.length === 0}
             className="min-w-24"
           >
-            Process PDF
+            Process PDFs
           </Button>
         </div>
       </CardContent>

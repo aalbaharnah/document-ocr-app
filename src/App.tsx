@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { DataExtractionSetup } from './components/DataExtractionSetup';
 import { PDFUpload } from './components/PDFUpload';
-import { ImageDisplay, SelectionArea } from './components/ImageDisplay';
+
 import { ExtractedTextDisplay } from './components/ExtractedTextDisplay';
 import { QualitySettingsPanel, QualitySettings } from './components/QualitySettings';
+import { ExtractionTemplateEditor, ExtractionTemplate } from './components/ExtractionTemplate';
+import { BatchProcessingDisplay } from './components/BatchProcessingDisplay';
 import { PDFProcessor, PDFPageImage, PDFRenderOptions } from './utils/pdfProcessor';
 import { OCRProcessor, ExtractedText } from './utils/ocrProcessor';
 import { CSVExporter } from './utils/csvExporter';
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
-import { FileText, Settings, Image, Download, ArrowLeft } from 'lucide-react';
+import { FileText, Settings, Image, Download, ArrowLeft, Layout } from 'lucide-react';
 
 interface DataField {
   id: string;
@@ -17,22 +19,25 @@ interface DataField {
   description?: string;
 }
 
-type AppStep = 'setup' | 'upload' | 'convert' | 'select' | 'extract' | 'results';
+type AppStep = 'setup' | 'upload' | 'convert' | 'template' | 'batch-preview' | 'extract' | 'results';
 
 function App() {
   const [currentStep, setCurrentStep] = useState<AppStep>('setup');
   const [dataFields, setDataFields] = useState<DataField[]>([]);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [pdfImages, setPdfImages] = useState<PDFPageImage[]>([]);
-  const [selections, setSelections] = useState<SelectionArea[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [allPdfImages, setAllPdfImages] = useState<PDFPageImage[]>([]);
+  const [templateImage, setTemplateImage] = useState<PDFPageImage | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<ExtractionTemplate | null>(null);
+  const [savedTemplates, setSavedTemplates] = useState<ExtractionTemplate[]>([]);
   const [extractedData, setExtractedData] = useState<ExtractedText[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<{
     current: number;
     total: number;
+    currentPage?: number;
     currentField: string;
   } | undefined>();
-  
+
   // Quality settings state
   const [qualitySettings, setQualitySettings] = useState<QualitySettings>({
     scale: 3,
@@ -40,19 +45,19 @@ function App() {
     imageFormat: 'png',
     enableAntialiasing: true
   });
-  const [showQualitySettings, setShowQualitySettings] = useState(false);
+
 
   const handleFieldsChange = (fields: DataField[]) => {
     setDataFields(fields);
   };
 
-  const handleFileUpload = (file: File) => {
-    setUploadedFile(file);
+  const handleFileUpload = (files: File[]) => {
+    setUploadedFiles(files);
   };
 
   const handlePDFConversion = async () => {
-    if (!uploadedFile) return;
-    
+    if (uploadedFiles.length === 0) return;
+
     setIsProcessing(true);
     try {
       const renderOptions: PDFRenderOptions = {
@@ -61,10 +66,19 @@ function App() {
         imageFormat: qualitySettings.imageFormat,
         enableAntialiasing: qualitySettings.enableAntialiasing
       };
-      
-      const images = await PDFProcessor.convertPDFToImages(uploadedFile, renderOptions);
-      setPdfImages(images);
-      setCurrentStep('select');
+
+      // Process all PDF files
+      const allImages: PDFPageImage[] = [];
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const file = uploadedFiles[i];
+        const images = await PDFProcessor.convertPDFToImages(file, renderOptions, i);
+        allImages.push(...images);
+      }
+
+      setAllPdfImages(allImages);
+      // Use first image as template image
+      setTemplateImage(allImages[0] || null);
+      setCurrentStep('template');
     } catch (error) {
       console.error('Error converting PDF:', error);
       alert('Failed to convert PDF. Please try again.');
@@ -73,22 +87,26 @@ function App() {
     }
   };
 
-  const handleSelectionChange = (newSelections: SelectionArea[]) => {
-    setSelections(newSelections);
+  const handleTemplateCreate = (template: ExtractionTemplate) => {
+    setSavedTemplates(prev => [...prev, template]);
+    setSelectedTemplate(template);
   };
 
-  const handleTextExtraction = async () => {
-    if (selections.length === 0) return;
+  const handleTemplateSelect = (template: ExtractionTemplate) => {
+    setSelectedTemplate(template);
+    setCurrentStep('batch-preview');
+  };
 
+  const handleBatchExtraction = async (template: ExtractionTemplate, images: PDFPageImage[]) => {
     setIsProcessing(true);
     setCurrentStep('extract');
-    
+
     try {
-      const results = await OCRProcessor.extractTextFromSelections(
-        pdfImages,
-        selections,
-        (current, total, currentField) => {
-          setProcessingProgress({ current, total, currentField });
+      const results = await OCRProcessor.extractTextFromTemplate(
+        images,
+        { selections: template.selections },
+        (current, total, currentPage, currentField) => {
+          setProcessingProgress({ current, total, currentPage, currentField });
         }
       );
       setExtractedData(results);
@@ -96,14 +114,12 @@ function App() {
     } catch (error) {
       console.error('Error extracting text:', error);
       alert('Failed to extract text. Please try again.');
-      setCurrentStep('select');
+      setCurrentStep('batch-preview');
     } finally {
       setIsProcessing(false);
       setProcessingProgress(undefined);
     }
-  };
-
-  const handleDataChange = (data: ExtractedText[]) => {
+  }; const handleDataChange = (data: ExtractedText[]) => {
     setExtractedData(data);
   };
 
@@ -119,14 +135,17 @@ function App() {
       case 'convert':
         setCurrentStep('upload');
         break;
-      case 'select':
+      case 'template':
         setCurrentStep('upload');
         break;
+      case 'batch-preview':
+        setCurrentStep('template');
+        break;
       case 'extract':
-        setCurrentStep('select');
+        setCurrentStep('batch-preview');
         break;
       case 'results':
-        setCurrentStep('select');
+        setCurrentStep('batch-preview');
         break;
       default:
         break;
@@ -136,9 +155,11 @@ function App() {
   const resetApp = () => {
     setCurrentStep('setup');
     setDataFields([]);
-    setUploadedFile(null);
-    setPdfImages([]);
-    setSelections([]);
+    setUploadedFiles([]);
+    setAllPdfImages([]);
+    setTemplateImage(null);
+    setSelectedTemplate(null);
+    setSavedTemplates([]);
     setExtractedData([]);
     setIsProcessing(false);
     setProcessingProgress(undefined);
@@ -149,7 +170,8 @@ function App() {
       case 'setup': return <Settings className="h-5 w-5" />;
       case 'upload': return <FileText className="h-5 w-5" />;
       case 'convert': return <Image className="h-5 w-5" />;
-      case 'select': return <Image className="h-5 w-5" />;
+      case 'template': return <Layout className="h-5 w-5" />;
+      case 'batch-preview': return <Image className="h-5 w-5" />;
       case 'extract': return <Image className="h-5 w-5" />;
       case 'results': return <Download className="h-5 w-5" />;
       default: return null;
@@ -159,9 +181,10 @@ function App() {
   const getStepName = (step: AppStep) => {
     switch (step) {
       case 'setup': return 'Setup Fields';
-      case 'upload': return 'Upload PDF';
-      case 'convert': return 'Convert PDF';
-      case 'select': return 'Select Areas';
+      case 'upload': return 'Upload PDFs';
+      case 'convert': return 'Convert PDFs';
+      case 'template': return 'Create Template';
+      case 'batch-preview': return 'Preview Batch';
       case 'extract': return 'Extract Text';
       case 'results': return 'Review Results';
       default: return '';
@@ -183,7 +206,7 @@ function App() {
                 </p>
               </div>
             </div>
-            
+
             {currentStep !== 'setup' && (
               <div className="flex items-center space-x-2">
                 <Button variant="outline" onClick={goBack}>
@@ -203,20 +226,19 @@ function App() {
       <div className="border-b bg-muted/50">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center space-x-4 overflow-x-auto">
-            {(['setup', 'upload', 'select', 'results'] as AppStep[]).map((step, index) => {
+            {(['setup', 'upload', 'template', 'results'] as AppStep[]).map((step, index) => {
               const isActive = currentStep === step;
-              const isCompleted = ['setup', 'upload', 'select', 'results'].indexOf(currentStep) > index;
-              
+              const isCompleted = ['setup', 'upload', 'template', 'results'].indexOf(currentStep) > index;
+
               return (
                 <div
                   key={step}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                    isActive 
-                      ? 'bg-primary text-primary-foreground' 
-                      : isCompleted 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'text-muted-foreground'
-                  }`}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : isCompleted
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground'
+                    }`}
                 >
                   {getStepIcon(step)}
                   <span className="text-sm font-medium whitespace-nowrap">
@@ -242,7 +264,7 @@ function App() {
           <PDFUpload
             onFileUpload={handleFileUpload}
             onNext={() => setCurrentStep('convert')}
-            uploadedFile={uploadedFile}
+            uploadedFiles={uploadedFiles}
           />
         )}
 
@@ -255,7 +277,7 @@ function App() {
               onApply={handlePDFConversion}
               isProcessing={isProcessing}
             />
-            
+
             {/* Conversion Status Card */}
             <Card>
               <CardHeader>
@@ -294,12 +316,22 @@ function App() {
           </div>
         )}
 
-        {currentStep === 'select' && pdfImages.length > 0 && (
-          <ImageDisplay
-            images={pdfImages}
-            onSelectionChange={handleSelectionChange}
-            onNext={handleTextExtraction}
+        {currentStep === 'template' && (
+          <ExtractionTemplateEditor
+            templateImage={templateImage || undefined}
             dataFields={dataFields}
+            onTemplateCreate={handleTemplateCreate}
+            onTemplateSelect={handleTemplateSelect}
+            existingTemplates={savedTemplates}
+          />
+        )}
+
+        {currentStep === 'batch-preview' && selectedTemplate && (
+          <BatchProcessingDisplay
+            allImages={allPdfImages}
+            selectedTemplate={selectedTemplate}
+            onStartExtraction={handleBatchExtraction}
+            onBack={() => setCurrentStep('template')}
           />
         )}
 
